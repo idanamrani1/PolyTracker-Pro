@@ -170,48 +170,51 @@ def show_whales():
 
 
 def calculate_win_rate():
-    # fix for the connection error seen in logs
-    target_wallet = target_entry.get().strip().lower()
+    raw_input = target_entry.get().strip() 
 
-    # auto-clean input if user copied the '>' or 'actions' part
+    target_wallet = raw_input
     if target_wallet.startswith(">"): target_wallet = target_wallet[1:].strip()
     if "|" in target_wallet: target_wallet = target_wallet.split("|")[0].strip()
-    if " " in target_wallet: target_wallet = target_wallet.split(" ")[0].strip()
 
-    if not target_wallet:
-        log_to_screen("\nError: Paste a wallet address to calculate performance.")
+    if len(target_wallet) < 42:
+        log_to_screen("\nError: Wallet address too short. Check your input.")
         return
 
-    log_to_screen(f"\n[ANALYSIS] Fetching Financial Intel for {target_wallet[:8]}...")
+    log_to_screen(f"\n[ANALYSIS] Deep-Diving into {target_wallet[:10]}...")
+    url = f"https://data-api.polymarket.com/profile?user={target_wallet.lower()}"
 
-    url = f"https://data-api.polymarket.com/profile?user={target_wallet}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Origin": "https://polymarket.com",
+        "Referer": "https://polymarket.com/"
+    }
+
     try:
-        # detailed headers to mimic actual user browsing and avoid the 403 errors in image_403819.png
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json",
-            "Referer": "https://polymarket.com/"
-        }
         response = requests.get(url, headers=headers, timeout=15)
+
+        if response.status_code == 404:
+            alt_url = f"https://data-api.polymarket.com/profile/{target_wallet.lower()}"
+            response = requests.get(alt_url, headers=headers, timeout=15)
 
         if response.status_code == 200:
             data = response.json()
-            profit = float(data.get('profit', 0))
-            volume = float(data.get('volume', 0))
-            trades_count = data.get('tradesCount', 0)
+
+            profit = float(data.get('profit') or 0)
+            volume = float(data.get('volume') or 0)
+            trades = data.get('tradesCount') or 0
 
             roi = (profit / volume * 100) if volume > 0 else 0
 
-            log_to_screen(f"   > Results for {target_wallet[:10]}...")
-            log_to_screen(f"     - Volume: ${volume:,.2f} | Trades: {trades_count}")
-            log_to_screen(f"     - P&L: {'$' + '{:,.2f}'.format(profit)} | ROI: {roi:.2f}%")
+            log_to_screen(f"   > Success: Volume ${volume:,.2f} | P&L: ${profit:,.2f}")
+            log_to_screen(f"   > Calculated ROI: {roi:.2f}% | Trades: {trades}")
+            log_to_screen(f"   > Verdict: {'SMART MONEY' if profit > 0 else 'HIGH RISK'}")
 
-            if profit > 0:
-                log_to_screen("   > VERDICT: SMART MONEY")
-            else:
-                log_to_screen("   > VERDICT: HIGH RISK / LOSSES")
+        elif response.status_code == 404:
+            log_to_screen(
+                "   > Error 404: Wallet not found in Data-API. This whale might not have a public profile record yet.")
         else:
-            log_to_screen(f"   > Error: Server status {response.status_code}. Profile may be private.")  #
+            log_to_screen(f"   > Error: Server returned status {response.status_code}.")
+
     except Exception as e:
         log_to_screen(f"   > System Error: {str(e)}")
 
